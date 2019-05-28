@@ -49,8 +49,12 @@ public class SpigotStartMojo extends AbstractMojo {
 	private String error;
 	@Parameter( property = "start.filename", defaultValue = "" )
 	private String filename;
+	@Parameter( property = "start.foldername", defaultValue = "" )
+	private String foldername;
+	
 	
 	public static Process spigotProcess;
+	private File baseFolder = null;
 
 	public void execute() throws MojoExecutionException, MojoFailureException {
 		Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -73,11 +77,24 @@ public class SpigotStartMojo extends AbstractMojo {
 		if(filename == null || filename.isEmpty())
 			throw new MojoFailureException("No Plugin filename configured!");
 		
+		if(new File("").getName().equalsIgnoreCase(foldername)) { // Still a stupid hack
+			baseFolder = new File("pom.xml").getParentFile();
+		} else {
+			File folder = new File(foldername);
+			if(folder.exists() && folder.isDirectory()) {
+				baseFolder = folder;
+			}
+		}
+		
+		if(baseFolder == null){
+			throw new MojoFailureException("Unable to find the projects folder!");
+		}
+		
 		String[] targetVersions = versions.split(",");
 		getLog().info("Testing the following Versions: " + Arrays.toString(targetVersions));
 
 		
-		File spigotWorkingDir = new File("target/it/spigotmc");
+		File spigotWorkingDir = new File(baseFolder, "target/it/spigotmc");
 		spigotWorkingDir.mkdirs();
 		//Delete worlds
 		getLog().info("Deleteing worlds!");
@@ -88,7 +105,7 @@ public class SpigotStartMojo extends AbstractMojo {
 		File pluginFolder = new File(spigotWorkingDir, "plugins");
 		pluginFolder.mkdirs();
 		
-		File pluginfile = new File("target", filename);
+		File pluginfile = new File(new File(baseFolder, "target"), filename);
 		if(!pluginfile.exists()) {
 			throw new MojoFailureException("Plugin file not found at '" + pluginfile.getAbsolutePath()+ "'");
 		}
@@ -120,7 +137,7 @@ public class SpigotStartMojo extends AbstractMojo {
 		getLog().info("Starting Spigot '" + version + "' for testing...");
 		try {
 			// Create the working dir for spigot to run
-			File spigotWorkingDir = new File("target/it/spigotmc");
+			File spigotWorkingDir = new File(baseFolder, "target/it/spigotmc");
 			spigotWorkingDir.mkdirs();
 
 			// Accept the EULA so Spigot will run
