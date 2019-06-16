@@ -219,7 +219,7 @@ public class SpigotStartMojo extends AbstractMojo {
 				}
 			});
 			watcher.start();
-			while (spigotProcess.isAlive() && status.get() == Status.WAITING && (System.currentTimeMillis() - start) < 180000) {
+			while (spigotProcess.isAlive() && status.get() == Status.WAITING && (System.currentTimeMillis() - start) < 240000) {
 				Thread.sleep(1000);
 			}
 			System.out.println("Status: " + status.get());
