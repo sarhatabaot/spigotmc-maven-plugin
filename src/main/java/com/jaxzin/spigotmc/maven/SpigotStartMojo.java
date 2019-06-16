@@ -112,7 +112,7 @@ public class SpigotStartMojo extends AbstractMojo {
 		try {
 			Files.copy(pluginfile.toPath(), new File(pluginFolder, pluginfile.getName()).toPath());
 		} catch (IOException e) {
-			throw new MojoFailureException("Error moving Plugin file '" + pluginfile.getAbsolutePath()+ "'", e);
+			throw new MojoFailureException("Error moving Plugin file '" + pluginfile.getAbsolutePath()+ "' to '" + new File(pluginFolder, pluginfile.getName()).getAbsolutePath() + "' because: " + e.getMessage(), e);
 		}
 		
 		Map<String, Exception> errors = new HashMap<>();
@@ -126,6 +126,7 @@ public class SpigotStartMojo extends AbstractMojo {
 				getLog().error("Error in version '" + version + "'!", ex);
 			}
 		}
+		deleteFolder(spigotWorkingDir);
 		
 		if(!errors.isEmpty()) {
 			throw new MojoFailureException(errors.size() + " Version(s) had problems!");
