@@ -165,10 +165,10 @@ public class SpigotStartMojo extends AbstractMojo {
 			final String[] args;
 			if (System.getProperty("os.name").contains("Windows")) {
 				args = new String[] { "cmd.exe", "/C",
-				"java -jar " + outFile.getAbsolutePath() };
+				"java -jar " + outFile.getAbsolutePath()  + " nogui"};
 			} else {
 				args = new String[] { "/bin/bash", "-c",
-				"java -jar " + outFile.getAbsolutePath() };
+				"java -jar " + outFile.getAbsolutePath() + " nogui" };
 			}
 			spigotProcess = new ProcessBuilder(args).directory(spigotWorkingDir).redirectErrorStream(true).start();
         	BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(spigotProcess.getOutputStream()));
