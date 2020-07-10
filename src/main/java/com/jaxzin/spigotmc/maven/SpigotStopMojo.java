@@ -22,16 +22,11 @@ public class SpigotStopMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException, MojoFailureException {
        if(SpigotStartMojo.spigotProcess == null)return;
     	getLog().info("Shutting down Spigot...");
-        try {
-            final OutputStreamWriter out = new OutputStreamWriter(SpigotStartMojo.spigotProcess.getOutputStream());
-            PrintWriter writer = new PrintWriter(out);
-            writer.println("stop");
-            writer.flush();
-            writer.close();
-            SpigotStartMojo.spigotProcess.waitFor();
-        } catch (InterruptedException e) {
-            throw new MojoFailureException("Interrupted while waiting for Spigot to stop.", e);
-        }
+        final OutputStreamWriter out = new OutputStreamWriter(SpigotStartMojo.spigotProcess.getOutputStream());
+        PrintWriter writer = new PrintWriter(out);
+        writer.println("stop");
+        writer.flush();
+        writer.close();
         SpigotStartMojo.spigotProcess.destroyForcibly();
         try {
 			SpigotStartMojo.spigotProcess.waitFor();
