@@ -90,7 +90,7 @@ public class SpigotStartMojo extends AbstractMojo {
 			throw new MojoFailureException("Unable to find the projects folder!");
 		}
 		
-		String[] targetVersions = versions.split(",");
+		String[] targetVersions = versions.replace("\n", "").split(",");
 		getLog().info("Testing the following Versions: " + Arrays.toString(targetVersions));
 
 		
@@ -151,6 +151,13 @@ public class SpigotStartMojo extends AbstractMojo {
 			// Get spigot
 			String url = "https://cdn.getbukkit.org/spigot/spigot-" + version + ".jar";
 			File outFile = new File(spigotWorkingDir, "spigot-" + version + ".jar");
+			if(version.startsWith("http")) {
+				url = version;
+				outFile = new File(spigotWorkingDir, "customServer.jar");
+			}
+			if(outFile.exists()) {
+				outFile.delete();
+			}
 			try (BufferedInputStream in = new BufferedInputStream(new URL(url).openStream());
 					  FileOutputStream fileOutputStream = new FileOutputStream(outFile.getAbsolutePath())) {
 					    byte dataBuffer[] = new byte[1024];
