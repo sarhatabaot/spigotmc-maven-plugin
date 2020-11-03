@@ -14,10 +14,8 @@ import java.net.URLConnection;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -93,9 +91,9 @@ public class SpigotStartMojo extends AbstractMojo {
 			throw new MojoFailureException("Unable to find the projects folder!");
 		}
 		
-		List<String> targetVersions = Arrays.asList(versions.replace("\n", "").split(","));
-		targetVersions = targetVersions.stream().map(s -> s.trim()).collect(Collectors.toList());
-		getLog().info("Testing the following Versions: " + targetVersions);
+		String[] targetVersions = versions.replace("\n", "").split(",");
+		for(int i = 0; i < targetVersions.length; i++)targetVersions[i] = targetVersions[i].trim();
+		getLog().info("Testing the following Versions: " + Arrays.toString(targetVersions));
 
 		
 		File spigotWorkingDir = new File(baseFolder, "target/it/spigotmc");
