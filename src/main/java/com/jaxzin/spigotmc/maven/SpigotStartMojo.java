@@ -10,6 +10,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -150,15 +151,17 @@ public class SpigotStartMojo extends AbstractMojo {
 
 			// Get spigot
 			String url = "https://cdn.getbukkit.org/spigot/spigot-" + version + ".jar";
-			File outFile = new File(spigotWorkingDir, "spigot-" + version + ".jar");
 			if(version.startsWith("http")) {
 				url = version;
-				outFile = new File(spigotWorkingDir, "customServer.jar");
+				version = "custom";
 			}
+			File outFile = new File(spigotWorkingDir, "spigot-" + version + ".jar");
 			if(outFile.exists()) {
 				outFile.delete();
 			}
-			try (BufferedInputStream in = new BufferedInputStream(new URL(url).openStream());
+			URLConnection con = new URL(url).openConnection();
+			con.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.121 Safari/537.36 OPR/67.0.2245.46");
+			try (BufferedInputStream in = new BufferedInputStream(con.getInputStream());
 					  FileOutputStream fileOutputStream = new FileOutputStream(outFile.getAbsolutePath())) {
 					    byte dataBuffer[] = new byte[1024];
 					    int bytesRead;
