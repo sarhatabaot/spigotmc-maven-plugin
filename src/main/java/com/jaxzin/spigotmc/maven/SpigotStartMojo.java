@@ -4,18 +4,24 @@ import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -38,19 +44,19 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
  * necessary generated files and classes for the bukkit plugin already exist.
  * </p>
  */
-@Mojo(name = "start", defaultPhase = LifecyclePhase.PRE_INTEGRATION_TEST, requiresDependencyResolution = ResolutionScope.TEST, executionStrategy = "phase='validate'")
+@Mojo(name = "start", defaultPhase = LifecyclePhase.PRE_INTEGRATION_TEST, requiresDependencyResolution = ResolutionScope.TEST)
 public class SpigotStartMojo extends AbstractMojo {
 
-    @Parameter(property = "start.version", defaultValue = "")
+    @Parameter(property = "start.version")
     private String versions;
-    @Parameter(property = "start.works", defaultValue = "")
+    @Parameter(property = "start.works")
     private String works;
-    @Parameter(property = "start.error", defaultValue = "")
+    @Parameter(property = "start.error")
     private String error;
-    @Parameter(property = "start.filename", defaultValue = "")
+    @Parameter(property = "start.filename")
     private String filename;
-    @Parameter(property = "start.foldername", defaultValue = "")
-    private String foldername;
+    @Parameter(property = "start.foldername")
+    private String folderName;
 
 
     public static Process spigotProcess;
@@ -75,10 +81,10 @@ public class SpigotStartMojo extends AbstractMojo {
         if (filename == null || filename.isEmpty())
             throw new MojoFailureException("No Plugin filename configured!");
 
-        if (new File("").getName().equalsIgnoreCase(foldername)) { // Still a stupid hack
+        if (new File("").getName().equalsIgnoreCase(folderName)) { // Still a stupid hack
             baseFolder = new File("pom.xml").getParentFile();
         } else {
-            File folder = new File(foldername);
+            File folder = new File(folderName);
             if (folder.exists() && folder.isDirectory()) {
                 baseFolder = folder;
             }
@@ -96,23 +102,9 @@ public class SpigotStartMojo extends AbstractMojo {
         File spigotWorkingDir = new File(baseFolder, "target/it/spigotmc");
         spigotWorkingDir.mkdirs();
         //Delete worlds
-        getLog().info("Deleteing worlds!");
-        deleteFolder(new File(spigotWorkingDir, "world"));
-        deleteFolder(new File(spigotWorkingDir, "world_nether"));
-        deleteFolder(new File(spigotWorkingDir, "world_the_end"));
+        deleteWorlds(spigotWorkingDir);
         //Copy plugin
-        File pluginFolder = new File(spigotWorkingDir, "plugins");
-        pluginFolder.mkdirs();
-
-        File pluginfile = new File(new File(baseFolder, "target"), filename);
-        if (!pluginfile.exists()) {
-            throw new MojoFailureException("Plugin file not found at '" + pluginfile.getAbsolutePath() + "'");
-        }
-        try {
-            Files.copy(pluginfile.toPath(), new File(pluginFolder, pluginfile.getName()).toPath());
-        } catch (IOException e) {
-            throw new MojoFailureException("Error moving Plugin file '" + pluginfile.getAbsolutePath() + "' to '" + new File(pluginFolder, pluginfile.getName()).getAbsolutePath() + "' because: " + e.getMessage(), e);
-        }
+        copyPlugin(spigotWorkingDir);
 
         Map<String, Exception> errors = new HashMap<>();
 
@@ -125,7 +117,7 @@ public class SpigotStartMojo extends AbstractMojo {
                 getLog().error("Error in version '" + version + "'!", ex);
             }
         }
-        deleteFolder(spigotWorkingDir);
+        deleteFolders(spigotWorkingDir);
 
         if (!errors.isEmpty()) {
             throw new MojoFailureException(errors.size() + " Version(s) had problems!");
@@ -133,68 +125,100 @@ public class SpigotStartMojo extends AbstractMojo {
 
     }
 
+    private void copyPlugin(File spigotWorkingDir) throws MojoFailureException {
+        File pluginFolder = new File(spigotWorkingDir, "plugins");
+        pluginFolder.mkdirs();
+
+        File pluginFile = new File(new File(baseFolder, "target"), filename);
+        if (!pluginFile.exists()) {
+            throw new MojoFailureException("Plugin file not found at '" + pluginFile.getAbsolutePath() + "'");
+        }
+        try {
+            Files.copy(pluginFile.toPath(), new File(pluginFolder, pluginFile.getName()).toPath());
+        } catch (IOException e) {
+            throw new MojoFailureException("Error moving Plugin file '" + pluginFile.getAbsolutePath() + "' to '" + new File(pluginFolder, pluginFile.getName()).getAbsolutePath() + "' because: " + e.getMessage(), e);
+        }
+    }
+
+    private void deleteWorlds(final File spigotWorkingDir){
+        getLog().info("Deleting worlds!");
+        deleteFolders(new File(spigotWorkingDir, "world"));
+        deleteFolders(new File(spigotWorkingDir, "world_nether"));
+        deleteFolders(new File(spigotWorkingDir, "world_the_end"));
+    }
+
+    private void acceptEula(final File spigotWorkingDir) throws FileNotFoundException {
+        File eulaFile = new File(spigotWorkingDir, "eula.txt");
+        PrintWriter out = new PrintWriter(eulaFile);
+        out.println("eula=true");
+        out.close();
+    }
+
+    private String[] getRunArgs(final String outFilePath) {
+        if (System.getProperty("os.name").contains("Windows")) {
+            return new String[]{"cmd.exe", "/C",
+                    "java -jar " + outFilePath + " nogui"};
+        }
+        return new String[]{"/bin/bash", "-c",
+                "java -jar " + outFilePath + " nogui"};
+    }
+
+    private File getSpigot(String version, final File spigotWorkingDir) throws IOException {
+        String url = "https://cdn.getbukkit.org/spigot/spigot-" + version + ".jar";
+        if (version.startsWith("http")) {
+            url = version;
+            version = "custom";
+        }
+        File outFile = new File(spigotWorkingDir, "spigot-" + version + ".jar");
+        if (outFile.exists()) {
+            Files.delete(outFile.toPath());
+        }
+        URLConnection con = new URL(url).openConnection();
+        con.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.121 Safari/537.36 OPR/67.0.2245.46");
+        try (BufferedInputStream in = new BufferedInputStream(con.getInputStream());
+             FileOutputStream fileOutputStream = new FileOutputStream(outFile.getAbsolutePath())) {
+            byte[] dataBuffer = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = in.read(dataBuffer, 0, 1024)) != -1) {
+                fileOutputStream.write(dataBuffer, 0, bytesRead);
+            }
+        }
+
+        return outFile;
+    }
+
     private void testVersion(String version) throws MojoExecutionException, MojoFailureException {
-        getLog().info("Starting Spigot '" + version + "' for testing...");
+        getLog().info("Starting server '" + version + "' for testing...");
         try {
             // Create the working dir for spigot to run
             File spigotWorkingDir = new File(baseFolder, "target/it/spigotmc");
             spigotWorkingDir.mkdirs();
 
             // Accept the EULA so Spigot will run
-            File eulaFile = new File(spigotWorkingDir, "eula.txt");
-            PrintWriter out = new PrintWriter(eulaFile);
-            out.println("eula=true");
-            out.close();
-
+            acceptEula(spigotWorkingDir);
 
             // Get spigot
-            String url = "https://cdn.getbukkit.org/spigot/spigot-" + version + ".jar";
-            if (version.startsWith("http")) {
-                url = version;
-                version = "custom";
-            }
-            File outFile = new File(spigotWorkingDir, "spigot-" + version + ".jar");
-            if (outFile.exists()) {
-                outFile.delete();
-            }
-            URLConnection con = new URL(url).openConnection();
-            con.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.121 Safari/537.36 OPR/67.0.2245.46");
-            try (BufferedInputStream in = new BufferedInputStream(con.getInputStream());
-                 FileOutputStream fileOutputStream = new FileOutputStream(outFile.getAbsolutePath())) {
-                byte[] dataBuffer = new byte[1024];
-                int bytesRead;
-                while ((bytesRead = in.read(dataBuffer, 0, 1024)) != -1) {
-                    fileOutputStream.write(dataBuffer, 0, bytesRead);
-                }
-            } catch (IOException e) {
-                throw e;
-            }
+            File outFile = getSpigot(version, spigotWorkingDir);
 
-            final String[] args;
-            if (System.getProperty("os.name").contains("Windows")) {
-                args = new String[]{"cmd.exe", "/C",
-                        "java -jar " + outFile.getAbsolutePath() + " nogui"};
-            } else {
-                args = new String[]{"/bin/bash", "-c",
-                        "java -jar " + outFile.getAbsolutePath() + " nogui"};
-            }
+            // Get args
+            final String[] args = getRunArgs(outFile.getAbsolutePath());
+
             spigotProcess = new ProcessBuilder(args).directory(spigotWorkingDir).redirectErrorStream(true).start();
-            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(spigotProcess.getOutputStream()));
-            try {
+            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(spigotProcess.getOutputStream()))) {
                 writer.write("stop\n");
             } catch (IOException e) {
-                e.printStackTrace();
+                getLog().info(e);
             }
             BufferedReader in = new BufferedReader(new InputStreamReader(spigotProcess.getInputStream()));
             AtomicReference<Status> status = new AtomicReference<>(Status.WAITING);
             long start = System.currentTimeMillis();
             Thread watcher = new Thread(() -> {
                 try {
-                    String read = null;
+                    String read;
                     while (spigotProcess.isAlive()) {
                         read = in.readLine();
                         if (read != null) {
-                            System.out.println("Spigot: " + read);
+                            getLog().info("Spigot: " + read);
                             if (read.contains(works)) {
                                 spigotProcess.destroyForcibly();
                                 status.set(Status.OK);
@@ -226,7 +250,7 @@ public class SpigotStartMojo extends AbstractMojo {
             while (spigotProcess.isAlive() && status.get() == Status.WAITING && (System.currentTimeMillis() - start) < 240000) {
                 Thread.sleep(1000);
             }
-            System.out.println("Status: " + status.get());
+            getLog().info("Status: " + status.get());
             if (status.get() == Status.WAITING) {
                 throw new MojoFailureException("Nothing happened!");
             }
@@ -240,16 +264,14 @@ public class SpigotStartMojo extends AbstractMojo {
         }
     }
 
-    private void deleteFolder(File folder) {
-        if (folder.exists()) {
-            for (File f : folder.listFiles()) {
-                if (f.isFile()) {
-                    f.delete();
-                } else {
-                    deleteFolder(f);
-                }
-            }
-            folder.delete();
+    private void deleteFolders(File folder) {
+        if (!folder.exists()) return;
+        try (Stream<Path> walk = Files.walk(folder.toPath())) {
+            walk.sorted(Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(File::delete);
+        } catch (IOException e) {
+            getLog().warn(e);
         }
     }
 
