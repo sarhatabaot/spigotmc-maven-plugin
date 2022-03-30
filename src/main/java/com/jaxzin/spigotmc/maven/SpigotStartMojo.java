@@ -52,23 +52,21 @@ public class SpigotStartMojo extends AbstractMojo {
 	private String filename;
 	@Parameter( property = "start.foldername", defaultValue = "" )
 	private String foldername;
-	
-	
+
+
 	public static Process spigotProcess;
 	private File baseFolder = null;
 
 	public void execute() throws MojoExecutionException, MojoFailureException {
-		Runtime.getRuntime().addShutdownHook(new Thread() {
-		    public void run() {
-		        if(spigotProcess != null && spigotProcess.isAlive()) {
-		        	try {
-						new SpigotStopMojo().execute();
-					} catch (MojoExecutionException | MojoFailureException e) {
-						e.printStackTrace();
-					}
-		        }
-		    }
-		});
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			if(spigotProcess != null && spigotProcess.isAlive()) {
+				try {
+					new SpigotStopMojo().execute();
+				} catch (MojoExecutionException | MojoFailureException e) {
+					e.printStackTrace();
+				}
+			}
+		}));
 		if(versions == null || versions.isEmpty())
 			throw new MojoFailureException("No Version(s) configured!");
 		if(works == null || works.isEmpty())
@@ -77,7 +75,7 @@ public class SpigotStartMojo extends AbstractMojo {
 			throw new MojoFailureException("No Error lookup message configured!");
 		if(filename == null || filename.isEmpty())
 			throw new MojoFailureException("No Plugin filename configured!");
-		
+
 		if(new File("").getName().equalsIgnoreCase(foldername)) { // Still a stupid hack
 			baseFolder = new File("pom.xml").getParentFile();
 		} else {
@@ -86,16 +84,16 @@ public class SpigotStartMojo extends AbstractMojo {
 				baseFolder = folder;
 			}
 		}
-		
+
 		if(baseFolder == null){
 			throw new MojoFailureException("Unable to find the projects folder!");
 		}
-		
+
 		String[] targetVersions = versions.replace("\n", "").split(",");
 		for(int i = 0; i < targetVersions.length; i++)targetVersions[i] = targetVersions[i].trim();
 		getLog().info("Testing the following Versions: " + Arrays.toString(targetVersions));
 
-		
+
 		File spigotWorkingDir = new File(baseFolder, "target/it/spigotmc");
 		spigotWorkingDir.mkdirs();
 		//Delete worlds
@@ -106,7 +104,7 @@ public class SpigotStartMojo extends AbstractMojo {
 		//Copy plugin
 		File pluginFolder = new File(spigotWorkingDir, "plugins");
 		pluginFolder.mkdirs();
-		
+
 		File pluginfile = new File(new File(baseFolder, "target"), filename);
 		if(!pluginfile.exists()) {
 			throw new MojoFailureException("Plugin file not found at '" + pluginfile.getAbsolutePath()+ "'");
@@ -116,9 +114,9 @@ public class SpigotStartMojo extends AbstractMojo {
 		} catch (IOException e) {
 			throw new MojoFailureException("Error moving Plugin file '" + pluginfile.getAbsolutePath()+ "' to '" + new File(pluginFolder, pluginfile.getName()).getAbsolutePath() + "' because: " + e.getMessage(), e);
 		}
-		
+
 		Map<String, Exception> errors = new HashMap<>();
-		
+
 		for(String version : targetVersions) {
 			version = version.trim();
 			try {
@@ -129,11 +127,11 @@ public class SpigotStartMojo extends AbstractMojo {
 			}
 		}
 		deleteFolder(spigotWorkingDir);
-		
+
 		if(!errors.isEmpty()) {
 			throw new MojoFailureException(errors.size() + " Version(s) had problems!");
 		}
-		
+
 	}
 
 	private void testVersion(String version) throws MojoExecutionException, MojoFailureException {
@@ -148,7 +146,7 @@ public class SpigotStartMojo extends AbstractMojo {
 			PrintWriter out = new PrintWriter(eulaFile);
 			out.println("eula=true");
 			out.close();
-			
+
 
 			// Get spigot
 			String url = "https://cdn.getbukkit.org/spigot/spigot-" + version + ".jar";
@@ -164,7 +162,7 @@ public class SpigotStartMojo extends AbstractMojo {
 			con.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.121 Safari/537.36 OPR/67.0.2245.46");
 			try (BufferedInputStream in = new BufferedInputStream(con.getInputStream());
 					  FileOutputStream fileOutputStream = new FileOutputStream(outFile.getAbsolutePath())) {
-					    byte dataBuffer[] = new byte[1024];
+					    byte[] dataBuffer = new byte[1024];
 					    int bytesRead;
 					    while ((bytesRead = in.read(dataBuffer, 0, 1024)) != -1) {
 					        fileOutputStream.write(dataBuffer, 0, bytesRead);
@@ -172,7 +170,7 @@ public class SpigotStartMojo extends AbstractMojo {
 					} catch (IOException e) {
 					    throw e;
 					}
-			
+
 			final String[] args;
 			if (System.getProperty("os.name").contains("Windows")) {
 				args = new String[] { "cmd.exe", "/C",
@@ -189,44 +187,40 @@ public class SpigotStartMojo extends AbstractMojo {
 				e.printStackTrace();
 			}
 			BufferedReader in = new BufferedReader(new InputStreamReader(spigotProcess.getInputStream()));
-			AtomicReference<Status> status = new AtomicReference<SpigotStartMojo.Status>(Status.WAITING);
+			AtomicReference<Status> status = new AtomicReference<>(Status.WAITING);
 			long start = System.currentTimeMillis();
-			Thread watcher = new Thread(new Runnable() {
-
-				@Override
-				public void run() {
-					try {
-						String read = null;
-						while (spigotProcess.isAlive()) {
-							read = in.readLine();
-							if (read != null) {
-								System.out.println("Spigot: " + read);
-								if(read.contains(works)) {
-									spigotProcess.destroyForcibly();
-									status.set(Status.OK);
-									return;
-								}
-								if(read.contains(error)) {
-									status.set(Status.ERROR);
-									return;
-								}
-								if(read.contains("FAILED TO BIND TO PORT")) {
-									status.set(Status.ERROR);
-									return;
-								}
-								if(read.contains("This crash report")) {
-									status.set(Status.ERROR);
-									return;
-								}
-								if(read.contains("Done")) {
-									status.set(Status.WAITING);
-									return;
-								}
+			Thread watcher = new Thread(() -> {
+				try {
+					String read = null;
+					while (spigotProcess.isAlive()) {
+						read = in.readLine();
+						if (read != null) {
+							System.out.println("Spigot: " + read);
+							if(read.contains(works)) {
+								spigotProcess.destroyForcibly();
+								status.set(Status.OK);
+								return;
+							}
+							if(read.contains(error)) {
+								status.set(Status.ERROR);
+								return;
+							}
+							if(read.contains("FAILED TO BIND TO PORT")) {
+								status.set(Status.ERROR);
+								return;
+							}
+							if(read.contains("This crash report")) {
+								status.set(Status.ERROR);
+								return;
+							}
+							if(read.contains("Done")) {
+								status.set(Status.WAITING);
+								return;
 							}
 						}
-					}catch(Exception ex) {
-						ex.printStackTrace();
 					}
+				}catch(Exception ex) {
+					ex.printStackTrace();
 				}
 			});
 			watcher.start();
@@ -246,7 +240,7 @@ public class SpigotStartMojo extends AbstractMojo {
 			throw new MojoFailureException("Unable to start Spigot server.", t);
 		}
 	}
-	
+
 	private void deleteFolder(File folder) {
 		if(folder.exists()) {
 			for(File f : folder.listFiles()) {
@@ -259,8 +253,8 @@ public class SpigotStartMojo extends AbstractMojo {
 			folder.delete();
 		}
 	}
-	
-	private static enum Status{
+
+	private enum Status{
 		WAITING, ERROR, OK
 	}
 
