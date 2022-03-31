@@ -23,15 +23,22 @@ import java.util.stream.Stream;
 
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Plugin;
+import org.apache.maven.model.Resource;
 import org.apache.maven.plugin.AbstractMojo;
+import org.apache.maven.plugin.BuildPluginManager;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.configuration.xml.XmlPlexusConfiguration;
+
+import static org.twdata.maven.mojoexecutor.MojoExecutor.executeMojo;
+import static org.twdata.maven.mojoexecutor.MojoExecutor.executionEnvironment;
+import static org.twdata.maven.mojoexecutor.PlexusConfigurationUtils.toXpp3Dom;
 
 /**
  * <p>
@@ -70,6 +77,9 @@ public class SpigotStartMojo extends AbstractMojo {
     @Parameter(property = "start.server", defaultValue = "target/it/spigotmc")
     private String serverfolder;
 
+    @Parameter(property = "start.server-properties", defaultValue = "false")
+    private boolean serverproperties;
+
 
     /**
      * Plugin to execute.
@@ -100,6 +110,12 @@ public class SpigotStartMojo extends AbstractMojo {
      */
     @Parameter(defaultValue = "${session}", readonly = true)
     private MavenSession mavenSession;
+
+    /**
+     * The Maven BuildPluginManager component.
+     */
+    @Component
+    private BuildPluginManager pluginManager;
 
     public static Process spigotProcess;
     private File baseFolder = null;
@@ -181,6 +197,17 @@ public class SpigotStartMojo extends AbstractMojo {
         out.close();
     }
 
+    private void loadServerProperties(final File spigotWorkingDir) throws IOException{
+        if(!serverproperties)
+            return;
+
+        File serverPropertiesTest = new File(mavenProject.getBasedir(), "src/test/resources/server.properties");
+        if(!serverPropertiesTest.exists())
+            return;
+
+        Files.copy(serverPropertiesTest.toPath(),new File(spigotWorkingDir, "server.properties").toPath());
+    }
+
     private String [] getRunArgs(final String outFilePath) {
         if (System.getProperty("os.name").contains("Windows")) {
             return new String[]{"cmd.exe", "/C",
@@ -221,6 +248,7 @@ public class SpigotStartMojo extends AbstractMojo {
             File spigotWorkingDir = new File(baseFolder, serverfolder);
             spigotWorkingDir.mkdirs();
 
+            loadServerProperties(spigotWorkingDir);
             // Accept the EULA so Spigot will run
             acceptEula(spigotWorkingDir);
 
@@ -247,7 +275,8 @@ public class SpigotStartMojo extends AbstractMojo {
                         if (read != null) {
                             getLog().info("Spigot: " + read);
                             if (read.contains(enabled)) {
-                                status.set(Status.ENABLED);
+                                executeMojo(plugin, goal, toXpp3Dom(configuration), executionEnvironment(mavenProject, mavenSession, pluginManager));
+                                //status.set(Status.ENABLED);
                                 return;
                             }
                             if (read.contains(works)) {
@@ -279,7 +308,9 @@ public class SpigotStartMojo extends AbstractMojo {
             });
             watcher.start();
             if (status.get() == Status.ENABLED) {
-                //run failsafe tests now
+                status.set(Status.WAITING);
+                //this runs the tests, but in the ide environment, doesn't get access to bukkit api
+                executeMojo(plugin, goal, toXpp3Dom(configuration), executionEnvironment(mavenProject, mavenSession, pluginManager));
             }
             while (spigotProcess.isAlive() && status.get() == Status.WAITING && (System.currentTimeMillis() - start) < 240000) {
                 Thread.sleep(1000);

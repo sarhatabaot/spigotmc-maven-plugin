@@ -57,15 +57,8 @@
 			<groupId>org.twdata.maven</groupId>
 			<artifactId>mojo-executor</artifactId>
 			<version>2.4.0</version>
-			<scope>provided</scope>
+			<scope>compile</scope>
 		</dependency>
-
-<!--		<dependency>-->
-<!--			<groupId>org.jetbrains</groupId>-->
-<!--			<artifactId>annotations</artifactId>-->
-<!--			<version>23.0.0</version>-->
-<!--			<scope>provided</scope>-->
-<!--		</dependency>-->
 	</dependencies>
 
 </project>
