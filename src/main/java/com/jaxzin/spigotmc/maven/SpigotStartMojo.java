@@ -7,11 +7,9 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
@@ -23,6 +21,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+import org.apache.maven.execution.MavenSession;
+import org.apache.maven.model.Plugin;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -30,6 +30,8 @@ import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.project.MavenProject;
+import org.codehaus.plexus.configuration.xml.XmlPlexusConfiguration;
 
 /**
  * <p>
@@ -44,20 +46,63 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
  * necessary generated files and classes for the bukkit plugin already exist.
  * </p>
  */
-@Mojo(name = "start", defaultPhase = LifecyclePhase.PRE_INTEGRATION_TEST, requiresDependencyResolution = ResolutionScope.TEST)
+@Mojo(
+        name = "start",
+        defaultPhase = LifecyclePhase.PRE_INTEGRATION_TEST,
+        requiresDependencyResolution = ResolutionScope.TEST,
+        requiresOnline = true //required for download server jar
+)
 public class SpigotStartMojo extends AbstractMojo {
 
-    @Parameter(property = "start.version")
-    private String versions;
-    @Parameter(property = "start.works")
-    private String works;
-    @Parameter(property = "start.error")
-    private String error;
-    @Parameter(property = "start.filename")
-    private String filename;
-    @Parameter(property = "start.foldername")
-    private String folderName;
+    @Parameter(property = "start.versions", required = true)
+    private String[] versions;
 
+    @Parameter(property = "start.works", required = true)
+    private String works;
+    @Parameter(property = "start.error", required = true)
+    private String error;
+    @Parameter(property = "start.enabled", required = true)
+    private String enabled;
+
+    @Parameter(property = "start.filename", required = true)
+    private String filename;
+
+    @Parameter(property = "start.foldername")
+    private String foldername;
+
+    @Parameter(property = "start.server", defaultValue = "target/it/spigotmc")
+    private String serverfolder;
+
+
+    /**
+     * Plugin to execute.
+     */
+    @Parameter(required = true)
+    private Plugin plugin;
+
+    /**
+     * Plugin goal to execute.
+     */
+    @Parameter(required = true)
+    private String goal;
+
+    /**
+     * Plugin configuration to use in the execution.
+     */
+    @Parameter
+    private XmlPlexusConfiguration configuration;
+
+    /**
+     * The project currently being build.
+     */
+    @Parameter(defaultValue = "${project}", readonly = true)
+    private MavenProject mavenProject;
+
+    /**
+     * The current Maven session.
+     */
+    @Parameter(defaultValue = "${session}", readonly = true)
+    private MavenSession mavenSession;
 
     public static Process spigotProcess;
     private File baseFolder = null;
@@ -72,7 +117,7 @@ public class SpigotStartMojo extends AbstractMojo {
                 }
             }
         }));
-        if (versions == null || versions.isEmpty())
+        if (versions == null || versions.length == 0)
             throw new MojoFailureException("No Version(s) configured!");
         if (works == null || works.isEmpty())
             throw new MojoFailureException("No Success lookup message configured!");
@@ -81,10 +126,10 @@ public class SpigotStartMojo extends AbstractMojo {
         if (filename == null || filename.isEmpty())
             throw new MojoFailureException("No Plugin filename configured!");
 
-        if (new File("").getName().equalsIgnoreCase(folderName)) { // Still a stupid hack
+        if (new File("").getName().equalsIgnoreCase(foldername)) { // Still a stupid hack
             baseFolder = new File("pom.xml").getParentFile();
         } else {
-            File folder = new File(folderName);
+            File folder = new File(foldername);
             if (folder.exists() && folder.isDirectory()) {
                 baseFolder = folder;
             }
@@ -94,12 +139,12 @@ public class SpigotStartMojo extends AbstractMojo {
             throw new MojoFailureException("Unable to find the projects folder!");
         }
 
-        String[] targetVersions = versions.replace("\n", "").split(",");
+        String[] targetVersions = versions;
         for (int i = 0; i < targetVersions.length; i++) targetVersions[i] = targetVersions[i].trim();
         getLog().info("Testing the following Versions: " + Arrays.toString(targetVersions));
 
 
-        File spigotWorkingDir = new File(baseFolder, "target/it/spigotmc");
+        File spigotWorkingDir = new File(baseFolder, serverfolder);
         spigotWorkingDir.mkdirs();
         //Delete worlds
         deleteWorlds(spigotWorkingDir);
@@ -154,7 +199,7 @@ public class SpigotStartMojo extends AbstractMojo {
         out.close();
     }
 
-    private String[] getRunArgs(final String outFilePath) {
+    private String [] getRunArgs(final String outFilePath) {
         if (System.getProperty("os.name").contains("Windows")) {
             return new String[]{"cmd.exe", "/C",
                     "java -jar " + outFilePath + " nogui"};
@@ -191,7 +236,7 @@ public class SpigotStartMojo extends AbstractMojo {
         getLog().info("Starting server '" + version + "' for testing...");
         try {
             // Create the working dir for spigot to run
-            File spigotWorkingDir = new File(baseFolder, "target/it/spigotmc");
+            File spigotWorkingDir = new File(baseFolder, serverfolder);
             spigotWorkingDir.mkdirs();
 
             // Accept the EULA so Spigot will run
@@ -219,6 +264,10 @@ public class SpigotStartMojo extends AbstractMojo {
                         read = in.readLine();
                         if (read != null) {
                             getLog().info("Spigot: " + read);
+                            if (read.contains(enabled)) {
+                                status.set(Status.ENABLED);
+                                return;
+                            }
                             if (read.contains(works)) {
                                 spigotProcess.destroyForcibly();
                                 status.set(Status.OK);
@@ -243,10 +292,13 @@ public class SpigotStartMojo extends AbstractMojo {
                         }
                     }
                 } catch (Exception ex) {
-                    ex.printStackTrace();
+                    getLog().error(ex);
                 }
             });
             watcher.start();
+            if (status.get() == Status.ENABLED) {
+                //run failsafe tests now
+            }
             while (spigotProcess.isAlive() && status.get() == Status.WAITING && (System.currentTimeMillis() - start) < 240000) {
                 Thread.sleep(1000);
             }
@@ -258,9 +310,9 @@ public class SpigotStartMojo extends AbstractMojo {
                 throw new MojoFailureException("Plugin did not start successfully!");
             }
             new SpigotStopMojo().execute();
-        } catch (Throwable t) {
+        } catch (Exception e) {
             new SpigotStopMojo().execute();
-            throw new MojoFailureException("Unable to start Spigot server.", t);
+            throw new MojoFailureException("Unable to start Spigot server.", e);
         }
     }
 
@@ -276,7 +328,7 @@ public class SpigotStartMojo extends AbstractMojo {
     }
 
     private enum Status {
-        WAITING, ERROR, OK
+        WAITING, ERROR, OK, ENABLED
     }
 
 }
