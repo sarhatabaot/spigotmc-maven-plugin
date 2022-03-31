@@ -80,6 +80,9 @@ public class SpigotStartMojo extends AbstractMojo {
     @Parameter(property = "start.server-properties", defaultValue = "false")
     private boolean serverproperties;
 
+    @Parameter(property = "start.testplugin",defaultValue = "true")
+    private boolean usetestplugin;
+
 
     /**
      * Plugin to execute.
@@ -148,6 +151,8 @@ public class SpigotStartMojo extends AbstractMojo {
         deleteWorlds(spigotWorkingDir);
         //Copy plugin
         copyPlugin(spigotWorkingDir);
+        if(usetestplugin)
+            copyTestPlugin(spigotWorkingDir);
 
         Map<String, Exception> errors = new HashMap<>();
 
@@ -181,6 +186,20 @@ public class SpigotStartMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new MojoFailureException("Error moving Plugin file '" + pluginFile.getAbsolutePath() + "' to '" + new File(pluginFolder, pluginFile.getName()).getAbsolutePath() + "' because: " + e.getMessage(), e);
         }
+    }
+
+    private void copyTestPlugin(File spigotWorkingDir) throws MojoFailureException{
+        File pluginFile = new File(new File(baseFolder, "target"), "mojo-test-plugin.jar");
+        File pluginFolder = new File(spigotWorkingDir, "plugins");
+        if (!pluginFile.exists()) {
+            throw new MojoFailureException("Test Plugin file not found at '" + pluginFile.getAbsolutePath() + "'");
+        }
+        try {
+            Files.copy(pluginFile.toPath(), new File(pluginFolder, pluginFile.getName()).toPath());
+        } catch (IOException e) {
+            throw new MojoFailureException("Error moving Plugin file '" + pluginFile.getAbsolutePath() + "' to '" + new File(pluginFolder, pluginFile.getName()).getAbsolutePath() + "' because: " + e.getMessage(), e);
+        }
+
     }
 
     private void deleteWorlds(final File spigotWorkingDir){
