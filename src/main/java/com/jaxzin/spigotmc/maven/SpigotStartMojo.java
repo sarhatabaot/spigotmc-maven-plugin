@@ -307,11 +307,6 @@ public class SpigotStartMojo extends AbstractMojo {
                 }
             });
             watcher.start();
-            if (status.get() == Status.ENABLED) {
-                status.set(Status.WAITING);
-                //this runs the tests, but in the ide environment, doesn't get access to bukkit api
-                executeMojo(plugin, goal, toXpp3Dom(configuration), executionEnvironment(mavenProject, mavenSession, pluginManager));
-            }
             while (spigotProcess.isAlive() && status.get() == Status.WAITING && (System.currentTimeMillis() - start) < 240000) {
                 Thread.sleep(1000);
             }
@@ -341,7 +336,7 @@ public class SpigotStartMojo extends AbstractMojo {
     }
 
     private enum Status {
-        WAITING, ERROR, OK, ENABLED
+        WAITING, ERROR, OK
     }
 
 }
