@@ -117,15 +117,7 @@ public class SpigotStartMojo extends AbstractMojo {
                 }
             }
         }));
-        if (versions == null || versions.length == 0)
-            throw new MojoFailureException("No Version(s) configured!");
-        if (works == null || works.isEmpty())
-            throw new MojoFailureException("No Success lookup message configured!");
-        if (error == null || error.isEmpty())
-            throw new MojoFailureException("No Error lookup message configured!");
-        if (filename == null || filename.isEmpty())
-            throw new MojoFailureException("No Plugin filename configured!");
-
+        
         if (new File("").getName().equalsIgnoreCase(foldername)) { // Still a stupid hack
             baseFolder = new File("pom.xml").getParentFile();
         } else {
