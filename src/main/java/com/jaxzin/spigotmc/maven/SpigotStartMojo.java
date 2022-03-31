@@ -67,9 +67,6 @@ public class SpigotStartMojo extends AbstractMojo {
     @Parameter(property = "start.filename", required = true)
     private String filename;
 
-    @Parameter(property = "start.foldername")
-    private String foldername;
-
     @Parameter(property = "start.server", defaultValue = "target/it/spigotmc")
     private String serverfolder;
 
@@ -117,15 +114,8 @@ public class SpigotStartMojo extends AbstractMojo {
                 }
             }
         }));
-        
-        if (new File("").getName().equalsIgnoreCase(foldername)) { // Still a stupid hack
-            baseFolder = new File("pom.xml").getParentFile();
-        } else {
-            File folder = new File(foldername);
-            if (folder.exists() && folder.isDirectory()) {
-                baseFolder = folder;
-            }
-        }
+
+        baseFolder = mavenProject.getBasedir();
 
         if (baseFolder == null) {
             throw new MojoFailureException("Unable to find the projects folder!");
